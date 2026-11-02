@@ -42,6 +42,7 @@ Copy-Item neo4j\.env.example neo4j\.env
 DEEPSEEK_API_KEY=你的真实API_KEY
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-flash
+ANSWER_SYSTEM=kg_retrieval
 ```
 
 `neo4j/.env` 默认内容可以直接使用：
@@ -120,25 +121,103 @@ Pure LLM → Vector RAG → KG Retrieval
 
 除非修改了 Prompt 或评测代码，否则不要使用 `-RetryWrong`，它会产生大量额外 API 调用。
 
-## 二、实验内容
+### 实验结果
 
-### 2.1 Pure LLM
+运行过程中，PowerShell 会实时显示当前题号、hop、运行状态和 Exact Match。这部分是
+**终端文字输出**，方便观察进度。
+
+实验结束后会保存两类文件：
+
+1. **Metrics（JSON）**：保存总体指标和分 hop 指标，是写 report 时主要使用的结果。
+2. **Predictions（JSONL）**：每行对应一道题，保存问题、标准答案、预测答案、状态、
+   Latency、生成文本以及使用的检索证据，主要用于错误分析和断点续跑。
+
+三组正式 Metrics 文件：
+
+```text
+experiments/midterm/metrics/answer_pure_llm_metrics.json
+experiments/midterm/metrics/answer_vector_rag_metrics.json
+experiments/midterm/metrics/answer_kg_retrieval_metrics.json
+```
+
+三组逐题 Predictions 文件：
+
+```text
+experiments/midterm/predictions/answer_pure_llm_predictions.jsonl
+experiments/midterm/predictions/answer_vector_rag_predictions.jsonl
+experiments/midterm/predictions/answer_kg_retrieval_predictions.jsonl
+```
+
+脚本目前**不会自动生成 PNG、JPG 或 Excel 图表**。最终结果的原始形式是 JSON/JSONL，
+同时在 PowerShell 中打印文字摘要。本 README 第五部分已经将正式 JSON Metrics 整理成
+Markdown 表格；组员写 report 时可以直接使用表格，或根据 Metrics JSON 自行绘制柱状图。
+
+## 二、启动完整项目
+
+前面的首次部署完成后，平时启动项目只需要依次启动 Neo4j、FastAPI 和 Android App。
+
+### 2.1 启动 Neo4j
+
+在项目根目录打开第一个 PowerShell 窗口：
+
+```powershell
+.\scripts\neo4j\start_neo4j.ps1
+```
+
+### 2.2 启动 FastAPI 后端
+
+在项目根目录打开第二个 PowerShell 窗口：
+
+```powershell
+.\backend\venv311\Scripts\python.exe -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+后端启动后，在浏览器打开 `http://127.0.0.1:8000/health` 检查状态。Android 调用
+`POST /chat` 时，后端默认使用 `backend/.env` 中配置的
+`ANSWER_SYSTEM=kg_retrieval`。
+
+### 2.3 在 Android Studio 运行前端
+
+1. 打开 Android Studio，选择项目根目录 `chat_Retrieval_project`，不要只打开 `app/`。
+2. 等待 Gradle Sync 完成，并在 Gradle Settings 中将 Gradle JDK 设为 **JDK 17**。
+3. 在 Device Manager 中启动一个 Android Emulator。
+4. 确认 Run Configuration 选择 `app` Module，然后点击 Run。
+
+Android Emulator 不能通过 `localhost` 访问电脑后端。项目已经在
+`app/src/main/java/com/alvin/chatbox/data/config/ApiConfig.kt` 中配置：
+
+```text
+http://10.0.2.2:8000/
+```
+
+其中 `10.0.2.2` 代表运行 Emulator 的电脑。保持 Neo4j 和 FastAPI 的 PowerShell
+窗口运行，在 Android 的 AI 聊天页面输入电影问题即可调用后端。
+
+如果 Run Configuration 显示 `Module not specified`，先完成 Gradle Sync，再新建
+Android App 类型的 Run Configuration，并将 Module 选择为 `app`。
+
+Midterm report 主要使用脚本实验结果，不要求启动 Android。这部分用于检查当前前后端
+基础，并为 final 阶段继续开发做准备。
+
+## 三、实验内容
+
+### 3.1 Pure LLM
 
 不向 DeepSeek 提供检索证据，用于测量模型仅依靠内部知识回答 MetaQA 问题的能力。
 它是三组实验中的 no-retrieval baseline。
 
-### 2.2 Vector RAG
+### 3.2 Vector RAG
 
 使用 `all-MiniLM-L6-v2` 将知识图谱三元组编码成384维向量，并通过 cosine similarity
 检索 Top-5 三元组。DeepSeek 只能根据检索结果回答，因此该实验能够观察语义检索对
 1-hop 和多跳问题的影响。
 
-### 2.3 KG Retrieval
+### 3.3 KG Retrieval
 
 DeepSeek 根据自然语言问题生成只读 Cypher，Neo4j 再执行明确的图关系路径。与 Vector
 RAG 相比，它不只查找相似文本，还能显式执行 1-hop、2-hop 和 3-hop 查询。
 
-## 三、评测方法
+## 四、评测方法
 
 三组方法使用相同的 benchmark、DeepSeek 配置和答案评分代码。主要指标为：
 
@@ -152,9 +231,9 @@ RAG 相比，它不只查找相似文本，还能显式执行 1-hop、2-hop 和 
 
 答案会先进行大小写和空格标准化，再按照集合比较，答案顺序不影响分数。
 
-## 四、实验结果
+## 五、实验结果
 
-### 4.1 总体结果
+### 5.1 总体结果
 
 | 方法         | 成功题数 |      Exact Match |        Precision |           Recall |               F1 | 平均 Latency |
 | ------------ | -------: | ---------------: | ---------------: | ---------------: | ---------------: | -----------: |
@@ -162,7 +241,7 @@ RAG 相比，它不只查找相似文本，还能显式执行 1-hop、2-hop 和 
 | Vector RAG   |  300/300 |           15.00% |           0.2249 |           0.2024 |           0.2008 |      1110 ms |
 | KG Retrieval |  300/300 | **96.00%** | **0.9745** | **0.9832** | **0.9773** |      1596 ms |
 
-### 4.2 分 hop 的 Exact Match
+### 5.2 分 hop 的 Exact Match
 
 | 方法         |            1-hop |            2-hop |            3-hop |
 | ------------ | ---------------: | ---------------: | ---------------: |
@@ -177,15 +256,17 @@ hop 数量下都保持了稳定结果，但平均 Latency 略高。
 Vector Retrieval 单独实验得到 Hits@1 20.67%、Hits@3 30.00%、Hits@5 32.67%、
 Recall@5 23.06%、MRR 0.254，说明 Vector RAG 的主要限制来自检索阶段。
 
-正式汇总 metrics 位于：
+正式汇总 Metrics 位于：
 
 ```text
-experiments/midterm/metrics/
+experiments/midterm/metrics/answer_pure_llm_metrics.json
+experiments/midterm/metrics/answer_vector_rag_metrics.json
+experiments/midterm/metrics/answer_kg_retrieval_metrics.json
 ```
 
-逐题 predictions 只保存在本地，不上传 GitHub。
+这里保存的是 JSON 格式的数值结果；上面的两张 Markdown 表格就是根据这些文件整理的。
 
-## 五、项目结构
+## 六、项目结构
 
 ```text
 chat_Retrieval_project/
@@ -226,7 +307,7 @@ MetaQA → 数据处理 → Neo4j Graph / Vector Index
        → 三种回答方法 → 统一评分 → Metrics
 ```
 
-## 六、Midterm Report 应写的范围
+## 七、Midterm Report 应写的范围
 
 Midterm report 建议包含：
 
@@ -242,7 +323,7 @@ Midterm report 建议包含：
 
 Midterm report 不要把 Hybrid RAG 写成已经完成的实验，也不需要重点描述 Android UI。
 
-## 七、Final 阶段计划
+## 八、Final 阶段计划
 
 Final 计划完成：
 
