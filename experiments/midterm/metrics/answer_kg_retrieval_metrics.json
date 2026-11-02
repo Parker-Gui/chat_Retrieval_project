@@ -1,0 +1,104 @@
+{
+  "experiment": "midterm_answer_system_kg_retrieval",
+  "system": "kg_retrieval",
+  "framework": "neo4j-graphrag retrievers + deterministic pipeline",
+  "llm_provider": "DeepSeek",
+  "benchmark": "experiments/shared/benchmark/midterm_300.jsonl",
+  "selection": {
+    "hops": [
+      1,
+      2,
+      3
+    ],
+    "limit": null
+  },
+  "created_at": "2026-11-02T12:25:18.964284+00:00",
+  "selected_count": 300,
+  "overall": {
+    "count": 300,
+    "successful_queries": 300,
+    "cypher_execution_success_rate": 1.0,
+    "exact_match": 0.96,
+    "answer_precision": 0.9745119047619049,
+    "answer_recall": 0.9831818181818182,
+    "answer_f1": 0.9773385460362205,
+    "mean_latency_ms": 1596.051360333428,
+    "median_latency_ms": 1562.6925500000652,
+    "success_only": {
+      "count": 300,
+      "exact_match": 0.96,
+      "answer_precision": 0.9745119047619049,
+      "answer_recall": 0.9831818181818182,
+      "answer_f1": 0.9773385460362205
+    },
+    "kg_retrieval_success_rate": 1.0,
+    "vector_retrieval_success_rate": 0.0,
+    "answer_text_covers_gold_rate": 0.5966666666666667
+  },
+  "by_hop": {
+    "1": {
+      "count": 100,
+      "successful_queries": 100,
+      "cypher_execution_success_rate": 1.0,
+      "exact_match": 0.95,
+      "answer_precision": 0.9760357142857142,
+      "answer_recall": 1.0,
+      "answer_f1": 0.9836767676767677,
+      "mean_latency_ms": 1478.3447650001108,
+      "median_latency_ms": 1427.4470000000292,
+      "success_only": {
+        "count": 100,
+        "exact_match": 0.95,
+        "answer_precision": 0.9760357142857142,
+        "answer_recall": 1.0,
+        "answer_f1": 0.9836767676767677
+      },
+      "kg_retrieval_success_rate": 1.0,
+      "vector_retrieval_success_rate": 0.0,
+      "answer_text_covers_gold_rate": 0.9
+    },
+    "2": {
+      "count": 100,
+      "successful_queries": 100,
+      "cypher_execution_success_rate": 1.0,
+      "exact_match": 0.96,
+      "answer_precision": 0.9675,
+      "answer_recall": 0.97,
+      "answer_f1": 0.9685714285714286,
+      "mean_latency_ms": 1576.429046000012,
+      "median_latency_ms": 1550.282000000152,
+      "success_only": {
+        "count": 100,
+        "exact_match": 0.96,
+        "answer_precision": 0.9675,
+        "answer_recall": 0.97,
+        "answer_f1": 0.9685714285714286
+      },
+      "kg_retrieval_success_rate": 1.0,
+      "vector_retrieval_success_rate": 0.0,
+      "answer_text_covers_gold_rate": 0.68
+    },
+    "3": {
+      "count": 100,
+      "successful_queries": 100,
+      "cypher_execution_success_rate": 1.0,
+      "exact_match": 0.97,
+      "answer_precision": 0.98,
+      "answer_recall": 0.9795454545454545,
+      "answer_f1": 0.9797674418604652,
+      "mean_latency_ms": 1733.3802700001615,
+      "median_latency_ms": 1707.9102499992587,
+      "success_only": {
+        "count": 100,
+        "exact_match": 0.97,
+        "answer_precision": 0.98,
+        "answer_recall": 0.9795454545454545,
+        "answer_f1": 0.9797674418604652
+      },
+      "kg_retrieval_success_rate": 1.0,
+      "vector_retrieval_success_rate": 0.0,
+      "answer_text_covers_gold_rate": 0.21
+    }
+  },
+  "metric_note": "answer_set metrics use the same scoring code as Step 6 and count a failed question as zero. For kg_retrieval and hybrid the structured KG answer set is authoritative; for pure_llm and vector_rag the answer list is the one the generator returned. `answer_text_covers_gold_rate` checks the generated sentence instead of the answer set and is a stricter text-level check."
+}

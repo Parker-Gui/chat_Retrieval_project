@@ -1,0 +1,44 @@
+{
+  "experiment": "step6_kg_retrieval_text2cypher",
+  "framework": "neo4j-graphrag",
+  "retriever": "Text2CypherRetriever",
+  "llm_provider": "DeepSeek",
+  "llm_model_env": "DEEPSEEK_MODEL",
+  "default_llm_model": "deepseek-flash",
+  "thinking_mode": "disabled",
+  "temperature": 0,
+  "max_tokens": 600,
+  "database": "Neo4j 5.26 Community",
+  "graph_state": {
+    "entity_nodes": 43234,
+    "relationships": 133582,
+    "relationship_types": [
+      "DIRECTED_BY",
+      "WRITTEN_BY",
+      "STARRED_ACTORS",
+      "HAS_GENRE",
+      "RELEASE_YEAR",
+      "IN_LANGUAGE",
+      "HAS_TAGS",
+      "HAS_IMDB_RATING",
+      "HAS_IMDB_VOTES"
+    ]
+  },
+  "prompt": {
+    "few_shot_examples": 15,
+    "rules": 14,
+    "answer_alias": "answer.name AS answer",
+    "retry_switches": ["--retry-errors", "--retry-wrong"]
+  },
+  "benchmark": "experiments/shared/benchmark/midterm_300.jsonl",
+  "benchmark_sha256": "9A743AEC7D893CC9D6433A4099DF0D4C1EF9AD0BB8C49F2E55D8706F0B7EFD50",
+  "evaluation": [
+    "cypher_execution_success_rate",
+    "exact_match",
+    "answer_precision",
+    "answer_recall",
+    "answer_f1",
+    "latency_ms"
+  ],
+  "safety": "The framework EXPLAINs generated Cypher and rejects non-read-only queries."
+}

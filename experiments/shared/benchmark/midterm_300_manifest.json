@@ -1,0 +1,12 @@
+{
+  "dataset": "MetaQA vanilla test split",
+  "seed": 42,
+  "questions_per_hop": 100,
+  "total_questions": 300,
+  "counts": {
+    "1-hop": 100,
+    "2-hop": 100,
+    "3-hop": 100
+  },
+  "benchmark_file": "midterm_300.jsonl"
+}

@@ -74,7 +74,7 @@ fun ChatScreen(viewModel: ChatViewModel = hiltViewModel()) {
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "AI正在思考中...",
+                                    text = "Searching movie knowledge...",
                                     fontSize = 14.sp,
                                     color = Color.Gray
                                 )
@@ -126,7 +126,7 @@ fun ChatScreen(viewModel: ChatViewModel = hiltViewModel()) {
                 value = input,
                 onValueChange = { input = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("输入消息...") },
+                placeholder = { Text("Ask a question about movies...") },
                 enabled = !uiState.isLoading
             )
             Spacer(Modifier.width(8.dp))
@@ -139,7 +139,7 @@ fun ChatScreen(viewModel: ChatViewModel = hiltViewModel()) {
                 },
                 enabled = !uiState.isLoading && input.isNotBlank()
             ) {
-                Text("发送")
+                Text("Send")
             }
         }
     }

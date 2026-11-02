@@ -1,0 +1,52 @@
+{
+  "experiment": "step5_vector_rag_retrieval",
+  "framework": "neo4j-graphrag VectorRetriever",
+  "created_at": "2026-11-02T12:04:15.433575+00:00",
+  "benchmark": "experiments/shared/benchmark/midterm_300.jsonl",
+  "embedding_model": "all-MiniLM-L6-v2",
+  "vector_index": "metaqa_chunk_embedding",
+  "top_k": 5,
+  "overall": {
+    "count": 300,
+    "hits_at_1": 0.20666666666666667,
+    "hits_at_3": 0.3,
+    "hits_at_5": 0.32666666666666666,
+    "answer_recall_at_5": 0.2306315786373057,
+    "mrr": 0.25355555555555553,
+    "mean_latency_ms": 16.363068666626834,
+    "median_latency_ms": 16.03515000169864
+  },
+  "by_hop": {
+    "1": {
+      "count": 100,
+      "hits_at_1": 0.48,
+      "hits_at_3": 0.61,
+      "hits_at_5": 0.63,
+      "answer_recall_at_5": 0.5734967320261437,
+      "mrr": 0.545,
+      "mean_latency_ms": 17.268228999855637,
+      "median_latency_ms": 16.777400000137277
+    },
+    "2": {
+      "count": 100,
+      "hits_at_1": 0.03,
+      "hits_at_3": 0.05,
+      "hits_at_5": 0.05,
+      "answer_recall_at_5": 0.026111111111111113,
+      "mrr": 0.03833333333333334,
+      "mean_latency_ms": 16.761931000182813,
+      "median_latency_ms": 16.797650001535658
+    },
+    "3": {
+      "count": 100,
+      "hits_at_1": 0.11,
+      "hits_at_3": 0.24,
+      "hits_at_5": 0.3,
+      "answer_recall_at_5": 0.09228689277466222,
+      "mrr": 0.17733333333333334,
+      "mean_latency_ms": 15.059045999842056,
+      "median_latency_ms": 14.935799999875599
+    }
+  },
+  "metric_note": "A retrieval hit means a gold answer appears as the subject or object of a retrieved MetaQA triple. This evaluates retrieval, not LLM generation."
+}

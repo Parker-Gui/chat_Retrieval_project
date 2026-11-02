@@ -83,7 +83,7 @@ Before running tests:
 
 2. **Configure environment variables:**
    - Copy `env.example` to `.env`
-   - Set your `DASHSCOPE_API_KEY`
+   - Set your `DEEPSEEK_API_KEY`
 
 3. **Install dependencies:**
    ```bash
@@ -125,8 +125,8 @@ Before running tests:
    - Check if port 8000 is available
 
 2. **"API key error"**
-   - Verify `DASHSCOPE_API_KEY` is set in `.env`
-   - Check if API key is valid at [DashScope Console](https://dashscope.console.aliyun.com/)
+   - Verify `DEEPSEEK_API_KEY` is set in `.env`
+   - Check if the API key is valid at [DeepSeek Platform](https://platform.deepseek.com/api_keys)
 
 3. **"Network error"**
    - Check internet connection
@@ -134,7 +134,7 @@ Before running tests:
    - Test with curl manually
 
 4. **"Invalid response format"**
-   - Check if Qwen API is responding correctly
+   - Check if the DeepSeek API is responding correctly
    - Verify API key permissions
 
 ## Manual Testing

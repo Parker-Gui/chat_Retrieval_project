@@ -110,7 +110,7 @@ def check_api_compatibility():
     
     print("\nImportant Notes:")
     print("   - Ensure FastAPI backend is running")
-    print("   - Check DASHSCOPE_API_KEY environment variable")
+    print("   - Check DEEPSEEK_API_KEY environment variable")
     print("   - Verify network connection and firewall settings")
     
     all_good = all("✓" in check for check in checks)
