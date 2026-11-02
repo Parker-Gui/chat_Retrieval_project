@@ -1,477 +1,481 @@
-# 🤖 Chatbox - AI Chat Application
+# MovieGraph：基于 RAG 与 Knowledge Graph 的电影问答实验
 
-[![Android](https://img.shields.io/badge/Android-API%2024+-green.svg)](https://developer.android.com)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-blue.svg)](https://kotlinlang.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1-green.svg)](https://fastapi.tiangolo.com)
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+本项目是信息检索课程 Project，使用 MetaQA 电影数据集，对比以下三种问答方法：
 
-一个基于Android + FastAPI + 阿里云通义千问的智能聊天应用，采用Clean Architecture架构设计，提供流畅的AI对话体验。
+1. **Pure LLM**：不检索外部知识，直接由 DeepSeek 回答。
+2. **Vector RAG**：从 Neo4j Vector Index 检索相关三元组，再由 DeepSeek 根据证据回答。
+3. **KG Retrieval**：由 DeepSeek 将问题转换为 Cypher，在 Neo4j 中执行图关系查询并返回答案。
 
-## ✨ 特性亮点
+项目基于开源 Android Chatbox 进行二次开发。中期阶段重点是后端核心检索功能和可复现
+实验，Android 前端与完整聊天流程将在 final 阶段继续完成。
 
-- 🎨 **现代化UI**: 基于Jetpack Compose的美观聊天界面
-- 🏗️ **Clean Architecture**: 清晰的分层架构，易于维护和扩展
-- 🔄 **实时对话**: 与阿里云通义千问AI进行流畅对话
-- 🛡️ **安全可靠**: 完善的错误处理和网络安全配置
-- 📱 **跨设备**: 支持Android模拟器和物理设备
-- ⚡ **高性能**: 使用协程和Flow实现响应式编程
+## 一、当前完成情况
 
-## 📱 项目结构
+中期项目已经完成：
 
-```
-chatbox/
-├── app/                          # Android应用
-│   ├── src/main/java/com/alvin/chatbox/
-│   │   ├── data/                 # 数据层
-│   │   │   ├── config/           # API配置
-│   │   │   │   └── ApiConfig.kt  # 网络配置
-│   │   │   ├── remote/           # 网络接口
-│   │   │   │   └── ChatApi.kt    # Retrofit接口
-│   │   │   └── repository/       # 仓库实现
-│   │   │       └── ChatRepositoryImpl.kt
-│   │   ├── domain/               # 领域层
-│   │   │   ├── model/            # 数据模型
-│   │   │   │   └── ChatMessage.kt
-│   │   │   ├── repository/       # 仓库接口
-│   │   │   │   └── ChatRepository.kt
-│   │   │   └── usecase/          # 用例
-│   │   │       └── SendChatMessageUseCase.kt
-│   │   ├── presentation/         # 表现层
-│   │   │   └── chat/             # 聊天界面
-│   │   │       ├── ChatScreen.kt # Compose UI
-│   │   │       └── ChatViewModel.kt # ViewModel
-│   │   └── di/                   # 依赖注入
-│   │       ├── NetworkModule.kt  # 网络模块
-│   │       └── RepositoryModule.kt # 仓库模块
-│   ├── src/main/res/             # 资源文件
-│   │   ├── xml/
-│   │   │   └── network_security_config.xml # 网络安全配置
-│   │   └── values/               # 字符串、颜色等资源
-│   └── build.gradle.kts          # Android构建配置
-├── backend/                      # FastAPI后端
-│   ├── main.py                   # 主应用文件
-│   ├── requirements.txt          # Python依赖
-│   ├── env.example              # 环境变量示例
-│   ├── test_api.py              # API测试脚本
-│   ├── check_api_compatibility.py # 接口兼容性检查
-│   └── quick_test.py            # 快速测试脚本
-├── .gitignore                   # Git忽略文件
-├── README.md                    # 项目说明
-└── GITHUB_GUIDE.md             # GitHub推送指南
-```
+- MetaQA 数据预处理与固定 300 题 benchmark；
+- Neo4j Knowledge Graph 导入与 1-hop、2-hop、3-hop 查询验证；
+- 基于 `all-MiniLM-L6-v2` 的 Vector Index；
+- Pure LLM、Vector RAG、KG Retrieval 三套回答 Pipeline；
+- DeepSeek JSON 结构化输出、答案解析与错误记录；
+- 三组完整实验及统一的 Exact Match、Precision、Recall、F1 和 Latency 评测；
+- PowerShell 一键实验脚本与断点续跑功能。
 
-## 🚀 快速开始
+中期不包含 Hybrid RAG，也不要求 Android 与后端完成端到端集成。
 
-### 📋 前置要求
+## 二、实验内容与结果
 
-- **Android开发环境**: Android Studio 2023.1+
-- **Python环境**: Python 3.8+
-- **阿里云账号**: 用于获取DashScope API密钥
-- **Android设备**: API 24+ (Android 7.0+)
+实验使用同一份固定 MetaQA benchmark，共 300 道问题，其中 1-hop、2-hop、3-hop
+各 100 道。三种方法使用同一个 DeepSeek 配置和同一套答案集合评分代码，主要变量是
+获取知识的方式。
 
-### 🔧 1. 后端设置
+### 2.1 三种方法的基本原理
 
-```bash
-# 克隆项目
-git clone https://github.com/yourusername/chatbox.git
-cd chatbox
+- **Pure LLM**：不提供检索证据，用于观察模型依靠内部知识能够达到的基线性能。
+- **Vector RAG**：将知识图谱三元组编码成向量，按语义相似度返回 Top-5 三元组，再让
+  DeepSeek 仅根据这些证据回答。它适合语义相似的事实检索，但不能保证多条三元组组成
+  完整的多跳路径。
+- **KG Retrieval**：使用 Text2Cypher 将自然语言问题转换成只读 Cypher，通过 Neo4j
+  显式遍历图关系。它能够直接执行 1-hop、2-hop 和 3-hop 关系查询。
 
-# 进入后端目录
-cd backend
+### 2.2 总体结果
 
-# 创建虚拟环境（推荐）
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+| 方法         | 成功题数 |      Exact Match |        Precision |           Recall |               F1 | 平均 Latency |
+| ------------ | -------: | ---------------: | ---------------: | ---------------: | ---------------: | -----------: |
+| Pure LLM     |  300/300 |            8.67% |           0.3057 |           0.4586 |           0.3196 |      1270 ms |
+| Vector RAG   |  300/300 |           15.00% |           0.2249 |           0.2024 |           0.2008 |      1110 ms |
+| KG Retrieval |  300/300 | **96.00%** | **0.9745** | **0.9832** | **0.9773** |      1596 ms |
 
-# 安装依赖
-pip install -r requirements.txt
+### 2.3 分 hop 的 Exact Match
 
-# 配置环境变量
-cp env.example .env
-# 编辑 .env 文件，添加你的 DASHSCOPE_API_KEY
+| 方法         |            1-hop |            2-hop |            3-hop |
+| ------------ | ---------------: | ---------------: | ---------------: |
+| Pure LLM     |           25.00% |            0.00% |            1.00% |
+| Vector RAG   |           43.00% |            0.00% |            2.00% |
+| KG Retrieval | **95.00%** | **96.00%** | **97.00%** |
 
-# 启动后端服务
-python main.py
+结果说明：Vector RAG 对简单 1-hop 查询有明显帮助，但 Top-5 相似三元组很难稳定覆盖
+完整的多跳关系；KG Retrieval 能够显式执行图路径，因此在三种 hop 数量下都保持稳定。
+KG Retrieval 的平均延迟略高，但准确率提升非常明显。
+
+Vector Retrieval 的单独检索实验还得到：Hits@1 为 20.67%，Hits@3 为 30.00%，
+Hits@5 为 32.67%，Recall@5 为 23.06%，MRR 为 0.254。这说明 Vector RAG 的主要
+限制来自证据检索阶段。
+
+正式汇总结果保存在：
+
+```text
+experiments/midterm/metrics/answer_pure_llm_metrics.json
+experiments/midterm/metrics/answer_vector_rag_metrics.json
+experiments/midterm/metrics/answer_kg_retrieval_metrics.json
+experiments/midterm/metrics/vector_rag_metrics.json
+experiments/midterm/metrics/kg_retrieval_metrics.json
 ```
 
-### 📱 2. Android应用设置
+逐题 predictions、Prompt 调试历史和小样本指标只保存在本地，已通过 `.gitignore`
+排除，不上传 GitHub。
 
-1. **打开项目**
-   ```bash
-   # 使用Android Studio打开项目根目录
-   ```
+## 三、环境要求
 
-2. **同步依赖**
-   - 等待Gradle同步完成
-   - 确保所有依赖下载成功
+目前的部署与实验脚本以 Windows PowerShell 为准。
 
-3. **运行应用**
-   - 连接Android设备或启动模拟器
-   - 点击运行按钮
+必须安装：
 
-### 🔑 3. 获取API密钥
+- Git；
+- Python 3.11；
+- JDK 17；
+- 可访问 DeepSeek API 的网络；
+- 一个可用的 `DEEPSEEK_API_KEY`。
 
-1. 访问 [阿里云DashScope控制台](https://dashscope.console.aliyun.com/)
-2. 注册/登录账号
-3. 创建API密钥
-4. 将密钥添加到 `backend/.env` 文件中：
-   ```env
-   DASHSCOPE_API_KEY=sk-your-actual-api-key-here
-   QWEN_MODEL=qwen-turbo
-   ```
+可选安装：
 
-## 🛠️ 技术栈详解
+- Android Studio：midterm 实验不需要，final 做 Android 集成时再使用；
+- Docker：当前默认使用本地 Neo4j ZIP，不要求 Docker。
 
-### 📱 Android端技术栈
+请不要使用 Python 3.14。部分依赖可能找不到对应的 wheel，导致 `pydantic-core` 尝试
+通过 Rust 编译并安装失败。本项目统一使用 Python 3.11。
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| **Kotlin** | 2.0.21 | 主要开发语言 |
-| **Jetpack Compose** | 2024.09.00 | 现代化UI框架 |
-| **Clean Architecture** | - | 架构模式 |
-| **Hilt** | 2.52 | 依赖注入框架 |
-| **Retrofit** | 2.11.0 | 网络请求库 |
-| **OkHttp** | 4.12.0 | HTTP客户端 |
-| **Coroutines** | 1.9.0 | 异步编程 |
-| **Flow** | - | 响应式数据流 |
-| **kotlinx-serialization** | 1.7.3 | JSON序列化 |
+## 四、从 GitHub 获取项目
 
-### 🖥️ 后端技术栈
+打开 PowerShell，进入准备存放课程项目的目录：
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| **FastAPI** | 0.104.1 | Web框架 |
-| **Python** | 3.8+ | 开发语言 |
-| **httpx** | 0.25.2 | 异步HTTP客户端 |
-| **pydantic** | 2.5.0 | 数据验证 |
-| **python-dotenv** | 1.0.0 | 环境变量管理 |
-| **uvicorn** | 0.24.0 | ASGI服务器 |
-
-### 🤖 AI服务
-
-- **阿里云通义千问**: 提供AI对话能力
-- **支持模型**: qwen-turbo, qwen-plus, qwen-max, qwen-long
-
-## 📋 功能特性
-
-### ✨ 核心功能
-- ✅ **实时AI对话**: 与通义千问AI进行自然对话
-- ✅ **美观界面**: Material Design 3风格的聊天界面
-- ✅ **消息气泡**: 用户和AI消息的差异化显示
-- ✅ **加载状态**: 优雅的加载动画和提示
-- ✅ **错误处理**: 完善的错误提示和恢复机制
-
-### 🏗️ 架构特性
-- ✅ **Clean Architecture**: 清晰的分层架构
-- ✅ **依赖注入**: 使用Hilt进行依赖管理
-- ✅ **响应式编程**: 基于Flow的状态管理
-- ✅ **网络安全**: 完善的网络安全配置
-- ✅ **环境配置**: 支持多环境切换
-
-### 🔧 开发特性
-- ✅ **类型安全**: 完整的Kotlin类型系统
-- ✅ **测试支持**: 完整的测试框架
-- ✅ **代码规范**: 遵循Android开发最佳实践
-- ✅ **文档完善**: 详细的代码注释和文档
-
-## 🔧 配置说明
-
-### 🌐 API配置
-
-在 `app/src/main/java/com/alvin/chatbox/data/config/ApiConfig.kt` 中配置：
-
-```kotlin
-object ApiConfig {
-    // 不同环境的Base URL
-    const val LOCAL_BASE_URL = "http://10.0.2.2:8000/"      // Android模拟器
-    const val DEV_BASE_URL = "http://192.168.0.157:8000/"   // 物理设备
-    const val PROD_BASE_URL = "https://your-domain.com/"   // 生产环境
-    
-    // 当前使用的环境
-    const val CURRENT_BASE_URL = LOCAL_BASE_URL
-    
-    // API端点
-    const val CHAT_ENDPOINT = "chat"
-    
-    // 超时配置
-    const val CONNECT_TIMEOUT_SECONDS = 30L
-    const val READ_TIMEOUT_SECONDS = 30L
-    const val WRITE_TIMEOUT_SECONDS = 30L
-}
+```powershell
+git clone https://github.com/Parker-Gui/chat_Retrieval_project.git
+cd chat_Retrieval_project
 ```
 
-### 🔐 环境变量配置
+如果已经 clone，只需进入项目目录并获取最新代码：
 
-在 `backend/.env` 中配置：
+```powershell
+git pull
+```
+
+## 五、创建 Python 环境并安装依赖
+
+以下命令均在项目根目录执行。
+
+### 5.1 创建 Python 3.11 Virtual Environment
+
+```powershell
+py -3.11 -m venv backend\venv311
+```
+
+激活环境：
+
+```powershell
+.\backend\venv311\Scripts\Activate.ps1
+```
+
+如果 PowerShell 禁止运行激活脚本，可仅对当前窗口临时允许：
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\backend\venv311\Scripts\Activate.ps1
+```
+
+也可以不激活环境，后续直接使用：
+
+```powershell
+.\backend\venv311\Scripts\python.exe
+```
+
+### 5.2 安装 Python 依赖
+
+```powershell
+.\backend\venv311\Scripts\python.exe -m pip install --upgrade pip
+.\backend\venv311\Scripts\python.exe -m pip install -r backend\requirements.txt
+```
+
+## 六、配置 DeepSeek 与 Neo4j
+
+### 6.1 配置 DeepSeek
+
+复制配置模板：
+
+```powershell
+Copy-Item backend\env.example backend\.env
+```
+
+打开 `backend/.env`，至少填写：
 
 ```env
-# 阿里云DashScope API密钥
-DASHSCOPE_API_KEY=sk-your-actual-api-key-here
-
-# 通义千问模型选择
-QWEN_MODEL=qwen-turbo
-
-# 可选配置
-DEBUG=true
-LOG_LEVEL=INFO
+DEEPSEEK_API_KEY=你的真实API_KEY
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-flash
 ```
 
-### 📱 设备配置
+不要把真实 API Key 写入 `env.example`，也不要提交 `.env`。
 
-| 设备类型 | URL配置 | 说明 |
-|----------|---------|------|
-| **Android模拟器** | `http://10.0.2.2:8000/` | 默认配置，无需修改 |
-| **物理设备** | `http://192.168.0.157:8000/` | 替换为你的电脑IP |
-| **生产环境** | `https://your-domain.com/` | 使用HTTPS |
+### 6.2 配置 Neo4j
 
-## 🧪 测试指南
+复制配置模板：
 
-### 🔧 后端API测试
-
-```bash
-# 进入后端目录
-cd backend
-
-# 运行完整测试套件
-python test_api.py
-
-# 运行快速连接测试
-python quick_test.py
-
-# 检查接口兼容性
-python check_api_compatibility.py
+```powershell
+Copy-Item neo4j\.env.example neo4j\.env
 ```
 
-### 📱 Android应用测试
+默认开发配置为：
 
-1. **单元测试**
-   ```bash
-   # 在Android Studio中运行
-   ./gradlew test
-   ```
-
-2. **集成测试**
-   - 确保后端服务正在运行
-   - 启动Android应用
-   - 发送测试消息验证功能
-
-3. **UI测试**
-   - 使用Android Studio的UI测试工具
-   - 验证界面交互和响应
-
-### 🌐 网络测试
-
-```bash
-# 测试后端连接
-curl http://localhost:8000/
-
-# 测试聊天接口
-curl -X POST "http://localhost:8000/chat" \
-     -H "Content-Type: application/json" \
-     -d '{"message": "Hello!"}'
+```env
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=moviegraph-dev
 ```
 
-## 📱 支持的设备和环境
+### 6.3 确认 JDK 17
 
-### 📱 Android设备
-- **最低版本**: API 24 (Android 7.0)
-- **推荐版本**: API 30+ (Android 11+)
-- **架构**: ARM64, ARMv7, x86_64
-
-### 🖥️ 开发环境
-- **Android Studio**: 2023.1+
-- **Gradle**: 8.0+
-- **JDK**: 11+
-- **Python**: 3.8+
-
-### 🌐 网络环境
-- **开发环境**: HTTP (localhost)
-- **生产环境**: HTTPS (推荐)
-- **防火墙**: 确保端口8000可访问
-
-## 🔒 安全最佳实践
-
-### 🛡️ 数据安全
-- ✅ **环境变量**: 使用`.env`文件管理敏感信息
-- ✅ **网络安全**: 配置网络安全策略
-- ✅ **API密钥**: 不在代码中硬编码
-- ✅ **HTTPS**: 生产环境使用安全连接
-
-### 🔐 代码安全
-- ✅ **依赖管理**: 定期更新依赖版本
-- ✅ **代码审查**: 遵循安全编码规范
-- ✅ **敏感信息**: 使用`.gitignore`排除敏感文件
-- ✅ **权限控制**: 最小权限原则
-
-### 📋 安全检查清单
-- [ ] `.env`文件已添加到`.gitignore`
-- [ ] 代码中无硬编码的API密钥
-- [ ] 网络安全配置正确
-- [ ] 依赖版本为最新稳定版
-- [ ] 生产环境使用HTTPS
-
-## 🐛 常见问题解决
-
-### ❌ 网络连接问题
-
-**问题**: `无法连接到服务器`
-
-**解决方案**:
-1. 检查后端服务是否运行
-   ```bash
-   curl http://localhost:8000/
-   ```
-2. 验证IP地址配置
-3. 检查防火墙设置
-4. 确认网络连接正常
-
-### ❌ API密钥问题
-
-**问题**: `API密钥无效`
-
-**解决方案**:
-1. 验证API密钥格式
-2. 检查环境变量配置
-3. 确认API权限设置
-4. 验证账户余额
-
-### ❌ 构建错误
-
-**问题**: Gradle构建失败
-
-**解决方案**:
-1. 清理项目: `Build -> Clean Project`
-2. 重新同步Gradle
-3. 检查依赖版本兼容性
-4. 更新Android Studio
-
-### ❌ 运行时错误
-
-**问题**: 应用崩溃或异常
-
-**解决方案**:
-1. 查看Android Studio Logcat
-2. 检查网络权限配置
-3. 验证API接口格式
-4. 检查数据模型匹配
-
-## 📈 性能优化
-
-### ⚡ Android端优化
-- **图片加载**: 使用Coil进行图片缓存
-- **网络请求**: 实现请求缓存和重试机制
-- **内存管理**: 合理使用ViewModel和Compose
-- **启动优化**: 减少启动时间
-
-### 🚀 后端优化
-- **异步处理**: 使用async/await提高并发
-- **连接池**: 配置HTTP连接池
-- **缓存策略**: 实现响应缓存
-- **监控日志**: 添加性能监控
-
-## 🔄 版本更新
-
-### 📝 更新日志
-
-#### v1.0.0 (当前版本)
-- ✅ 初始版本发布
-- ✅ 基础聊天功能
-- ✅ Clean Architecture架构
-- ✅ 网络安全配置
-
-#### 计划功能
-- 🔄 多轮对话历史
-- 🔄 语音输入支持
-- 🔄 图片消息支持
-- 🔄 用户认证系统
-- 🔄 消息加密传输
-
-### 🚀 升级指南
-
-1. **备份数据**: 备份重要配置和数据
-2. **更新依赖**: 更新到最新版本
-3. **测试功能**: 验证所有功能正常
-4. **部署更新**: 逐步部署到生产环境
-
-## 🤝 贡献指南
-
-### 📋 贡献流程
-
-1. **Fork项目**: 创建项目分支
-2. **创建分支**: `git checkout -b feature/amazing-feature`
-3. **提交更改**: `git commit -m 'Add amazing feature'`
-4. **推送分支**: `git push origin feature/amazing-feature`
-5. **创建PR**: 提交Pull Request
-
-### 📝 代码规范
-
-- **Kotlin**: 遵循官方编码规范
-- **Python**: 使用PEP 8规范
-- **提交信息**: 使用约定式提交格式
-- **文档**: 保持代码注释和文档更新
-
-### 🐛 问题报告
-
-使用GitHub Issues报告问题时，请包含：
-- 问题描述
-- 复现步骤
-- 预期行为
-- 实际行为
-- 环境信息
-- 相关日志
-
-## 📄 许可证
-
-本项目采用 [MIT License](LICENSE) 许可证。
-
-```
-MIT License
-
-Copyright (c) 2024 Chatbox Project
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+```powershell
+java -version
 ```
 
-## 📞 联系方式
+如果系统默认 Java 不是 17，在当前 PowerShell 窗口设置：
 
-- **GitHub Issues**: [项目Issues页面](https://github.com/yourusername/chatbox/issues)
-- **邮箱**: your-email@example.com
-- **QQ群**: 123456789
-- **微信群**: 扫码加入
+```powershell
+$env:JAVA_HOME = "你的JDK17目录"
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+java -version
+```
 
-## 🙏 致谢
+Android Studio 自带的 JBR 17 也可以使用。
 
-感谢以下开源项目和服务：
+## 七、准备 MetaQA 数据
 
-- [Jetpack Compose](https://developer.android.com/jetpack/compose) - 现代化Android UI框架
-- [FastAPI](https://fastapi.tiangolo.com) - 高性能Python Web框架
-- [阿里云通义千问](https://help.aliyun.com/zh/model-studio/) - AI对话服务
-- [Retrofit](https://square.github.io/retrofit/) - Android网络请求库
-- [Hilt](https://dagger.dev/hilt/) - Android依赖注入框架
+固定的 300 题 benchmark 已包含在仓库中，但为了导入 Neo4j 和建立 Vector Index，
+仍然需要 MetaQA 原始 Knowledge Base。
 
----
+从 MetaQA 官方仓库下载数据：
 
-<div align="center">
+```text
+https://github.com/yuyuz/MetaQA
+```
 
-**⭐ 如果这个项目对你有帮助，请给它一个Star！**
+将以下目录复制到 `data/raw/metaqa/`：
 
-Made with ❤️ by [Your Name](https://github.com/yourusername)
+```text
+data/raw/metaqa/
+├── kb/
+│   └── kb.txt
+├── 1-hop/
+│   └── vanilla/qa_test.txt
+├── 2-hop/
+│   └── vanilla/qa_test.txt
+└── 3-hop/
+    └── vanilla/qa_test.txt
+```
 
-</div>
+本项目默认只处理 test split，不需要音频数据和 NTM 改写数据。
+
+处理原始数据：
+
+```powershell
+.\backend\venv311\Scripts\python.exe .\scripts\data\prepare_metaqa.py
+```
+
+重新生成固定 benchmark：
+
+```powershell
+.\backend\venv311\Scripts\python.exe .\scripts\data\create_midterm_benchmark.py
+```
+
+## 八、安装 Neo4j 并导入 Knowledge Graph
+
+项目脚本会下载 Neo4j Community 5.26.32、设置本地密码、启动数据库、导入 MetaQA
+三元组并运行验证：
+
+```powershell
+.\scripts\neo4j\setup_neo4j.ps1
+```
+
+首次运行需要下载 Neo4j，时间取决于网络速度。完成后可以访问：
+
+```text
+Neo4j Browser: http://localhost:7474
+Bolt:          bolt://localhost:7687
+```
+
+之后只启动或停止 Neo4j：
+
+```powershell
+.\scripts\neo4j\start_neo4j.ps1
+.\scripts\neo4j\stop_neo4j.ps1
+```
+
+单独验证图数据：
+
+```powershell
+.\backend\venv311\Scripts\python.exe .\scripts\neo4j\verify_graph.py
+```
+
+## 九、建立 Vector Index
+
+第一次运行 Vector RAG 前，需要对 134,741 条 MetaQA 三元组生成 embedding，并在
+Neo4j 中建立 cosine Vector Index：
+
+```powershell
+.\scripts\run_step5.ps1
+```
+
+脚本会自动：
+
+1. 启动 Neo4j；
+2. 下载或加载 `all-MiniLM-L6-v2`；
+3. 生成 384 维 embedding；
+4. 写入 `KnowledgeChunk` 节点；
+5. 创建 Neo4j Vector Index；
+6. 运行 Vector Retrieval 单独评测。
+
+第一次 embedding 全部三元组需要一定时间。脚本支持断点续跑，不会重复计算已经完成的
+节点。如需强制重建：
+
+```powershell
+.\scripts\run_step5.ps1 -Rebuild
+```
+
+## 十、运行中期实验
+
+### 10.1 先运行 Smoke Tests
+
+```powershell
+.\backend\venv311\Scripts\python.exe .\scripts\evaluation\smoke_test_answer_pipelines.py
+.\backend\venv311\Scripts\python.exe .\scripts\evaluation\smoke_test_kg_retrieval.py
+```
+
+第一个测试使用 Stub，不消耗 DeepSeek API；第二个测试连接本地 Neo4j，但不调用
+DeepSeek。全部显示 `PASS` 后再运行正式实验。
+
+### 10.2 小规模检查
+
+建议每种方法先运行 3 道题，检查 API、Vector Index 和 Neo4j 是否正常：
+
+```powershell
+.\backend\venv311\Scripts\python.exe .\scripts\evaluation\evaluate_answer_systems.py --system pure_llm --limit 3
+.\backend\venv311\Scripts\python.exe .\scripts\evaluation\evaluate_answer_systems.py --system vector_rag --limit 3
+.\backend\venv311\Scripts\python.exe .\scripts\evaluation\evaluate_answer_systems.py --system kg_retrieval --limit 3
+```
+
+### 10.3 完整三组实验
+
+```powershell
+.\scripts\run_midterm.ps1
+```
+
+该命令会依次运行：
+
+```text
+Pure LLM → Vector RAG → KG Retrieval
+```
+
+每种方法使用同一份 300 题 benchmark。运行过程中每道题都会立刻写入本地 prediction
+文件，因此意外中断后再次运行同一命令即可从未完成的位置继续。
+
+只运行某一种方法：
+
+```powershell
+.\scripts\run_midterm.ps1 -System pure_llm
+.\scripts\run_midterm.ps1 -System vector_rag
+.\scripts\run_midterm.ps1 -System kg_retrieval
+```
+
+只重试 API 或运行失败的问题：
+
+```powershell
+.\scripts\run_midterm.ps1 -RetryErrors
+```
+
+只有在修改 Prompt 或评分逻辑后，才建议使用 `-RetryWrong`。它会重新调用所有回答错误的
+问题，产生额外 API 调用：
+
+```powershell
+.\scripts\run_midterm.ps1 -RetryWrong
+```
+
+### 10.4 输出位置
+
+正式汇总 metrics：
+
+```text
+experiments/midterm/metrics/
+```
+
+逐题 predictions：
+
+```text
+experiments/midterm/predictions/
+```
+
+Predictions 不上传 GitHub。如果需要给组员分析具体错误，应通过课程组内部方式单独共享。
+
+## 十一、评测指标
+
+- **Exact Match**：预测答案集合与标准答案集合完全一致才记为 1，是本实验的主要指标。
+- **Precision**：预测出的实体中有多少属于标准答案，用于衡量额外错误答案。
+- **Recall**：标准答案中有多少被系统找出，用于衡量遗漏答案。
+- **F1**：Precision 与 Recall 的调和平均，用于综合衡量答案准确性和完整性。
+- **Latency**：从输入问题到 Pipeline 返回结果的耗时。
+- **Hits@K、MRR**：用于 Vector Retrieval 单独实验，衡量相关证据是否出现在前 K 条结果
+  以及第一条相关证据的排名。
+- **Cypher Execution Success Rate**：用于 KG Retrieval，衡量生成的 Cypher 是否能通过
+  安全检查并成功执行。
+
+所有答案在评分前都会进行大小写和空格标准化，并按照集合比较，答案顺序不影响结果。
+
+## 十二、项目结构
+
+```text
+chat_Retrieval_project/
+├── app/                         # Android 客户端，final 阶段继续集成
+├── backend/
+│   ├── app/
+│   │   ├── rag/                 # 三种回答 Pipeline、生成器和共享 State
+│   │   └── retrieval/
+│   │       ├── vector/          # Vector Retriever 与本地 embedding 适配
+│   │       └── kg/              # Text2Cypher KG Retriever
+│   ├── main.py                  # FastAPI 服务入口
+│   ├── env.example              # DeepSeek 配置模板
+│   └── requirements.txt         # Python 依赖
+├── data/
+│   ├── raw/metaqa/              # MetaQA 原始数据，本地保存
+│   └── processed/               # 处理后的图和问答数据，本地生成
+├── experiments/
+│   ├── shared/benchmark/        # 固定 300 题 benchmark
+│   └── midterm/
+│       ├── configs/             # 可复现实验配置
+│       ├── metrics/             # 正式汇总指标
+│       └── predictions/         # 逐题结果，仅本地保存
+├── neo4j/
+│   ├── cypher/                  # Schema 和查询示例
+│   ├── .env.example             # Neo4j 配置模板
+│   └── docker-compose.yml       # 可选 Docker 配置
+├── scripts/
+│   ├── data/                    # 数据预处理和 benchmark 生成
+│   ├── neo4j/                   # Neo4j 安装、启动、导入与验证
+│   ├── indexing/                # Vector Index 构建
+│   ├── evaluation/              # 三组实验、评测和 Smoke Tests
+│   ├── run_step5.ps1            # Vector Index 与检索实验
+│   └── run_midterm.ps1          # 中期三组完整实验
+└── README.md
+```
+
+核心执行流程：
+
+```text
+MetaQA 原始数据
+    ↓
+数据预处理
+    ↓
+Neo4j Knowledge Graph + Vector Index
+    ↓
+Pure LLM / Vector RAG / KG Retrieval
+    ↓
+统一答案集合评分
+    ↓
+Metrics 与本地 Predictions
+```
+
+## 十三、Midterm Report 建议范围
+
+Midterm report 由组员根据当前代码和实验结果完成，建议包含：
+
+1. **Introduction / Background**
+   - 课程问题背景；
+   - LLM factual QA 的限制；
+   - RAG 与 Knowledge Graph 的作用。
+2. **Dataset and Benchmark**
+   - MetaQA 数据集；
+   - Knowledge Graph 三元组；
+   - 1-hop、2-hop、3-hop；
+   - 固定 300 题采样方法。
+3. **Technical Solutions**
+   - Neo4j 图模型；
+   - Pure LLM baseline；
+   - Vector RAG Pipeline；
+   - Text2Cypher KG Retrieval Pipeline；
+   - DeepSeek JSON 输出与错误处理。
+4. **Evaluation Method**
+   - 三组方法的控制变量；
+   - Exact Match、Precision、Recall、F1、Latency；
+   - Vector Retrieval 和 Cypher 的辅助指标。
+5. **Results and Analysis**
+   - 总体结果；
+   - 分 hop 结果；
+   - Vector RAG 多跳能力不足的原因；
+   - KG Retrieval 的优势、延迟和同名实体限制。
+6. **Current Limitations and Next Plan**
+   - 当前只有核心检索实验；
+   - Hybrid RAG 与 Android 端到端功能留到 final。
+
+Midterm report 不应把 Hybrid RAG 写成已经完成的中期实验，也不需要重点描述 Android UI。
+
+## 十四、Final 阶段计划
+
+Final 计划完成：
+
+1. 实现 Hybrid RAG，同时使用 Vector Retrieval 与 KG Retrieval；
+2. 设计证据合并、去重和冲突处理策略；
+3. 将最佳 Pipeline 接入 FastAPI `/chat`；
+4. 完成 Android Chat UI 与后端通信；
+5. 在界面中展示回答、来源和错误提示；
+6. 根据时间决定是否加入用户反馈和 Online Search fallback；
+7. 在相同 benchmark 上增加 Hybrid RAG，形成四组对照；
+8. 进行 Ablation Study，例如只使用 Vector、只使用 KG、两者结合；
+9. 完成 final report 和项目演示。

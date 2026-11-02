@@ -178,7 +178,7 @@ def main():
         print("⚠️  Some tests failed. Please check your configuration.")
         print("   Make sure:")
         print("   1. FastAPI server is running")
-        print("   2. DASHSCOPE_API_KEY is set in .env file")
+        print("   2. DEEPSEEK_API_KEY is set in .env file")
         print("   3. You have internet connection")
         print("   4. Your API key is valid")
 

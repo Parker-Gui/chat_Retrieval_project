@@ -1,8 +1,8 @@
 # Chatbox Backend Setup Instructions
 
 ## Prerequisites
-1. Python 3.8 or higher
-2. Alibaba Cloud DashScope API Key
+1. Python 3.11
+2. DeepSeek API Key (only required for answer generation, not Step 5 retrieval)
 
 ## Setup Steps
 
@@ -14,7 +14,7 @@ pip install -r requirements.txt
 
 ### 2. Configure Environment Variables
 1. Copy `env.example` to `.env`
-2. Get your API key from [Alibaba Cloud DashScope Console](https://dashscope.console.aliyun.com/)
+2. Get your API key from [DeepSeek Platform](https://platform.deepseek.com/api_keys)
 3. Replace `your_api_key_here` with your actual API key
 
 ### 3. Run the Server
@@ -43,13 +43,10 @@ Send a chat message and get AI response
 }
 ```
 
-## Available Qwen Models
-- `qwen-turbo`: Fast and cost-effective
-- `qwen-plus`: Balanced performance and cost
-- `qwen-max`: Highest quality responses
-- `qwen-long`: For long context conversations
+## DeepSeek configuration
 
-Change the model in `main.py` line 45 if needed.
+The default is `deepseek-flash`. Change `DEEPSEEK_MODEL` in `.env` to use a
+different model supported by your DeepSeek account.
 
 ## Testing
 You can test the API using curl:

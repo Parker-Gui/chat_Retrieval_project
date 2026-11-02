@@ -139,11 +139,20 @@ wheels/
 MANIFEST
 
 # Virtual environments
+.venv/
 venv/
 env/
 ENV/
 env.bak/
 venv.bak/
+backend/venv311/
+
+# Downloaded and generated MetaQA data
+data/raw/metaqa/1-hop/
+data/raw/metaqa/2-hop/
+data/raw/metaqa/3-hop/
+data/raw/metaqa/kb/kb.txt
+data/processed/
 
 # Environment variables
 .env
@@ -151,6 +160,34 @@ venv.bak/
 .env.development.local
 .env.test.local
 .env.production.local
+neo4j/.env
+neo4j/native.pid
+
+# Local AI notes, handoffs, and internal working documents
+DEEPSEEK_HANDOFF.md
+*_HANDOFF.md
+AGENTS.md
+CLAUDE.md
+CODEX.md
+GEMINI.md
+AI_NOTES.md
+INTEGRATION_COMPLETE.md
+PROJECT_SUMMARY.md
+.agents/
+.codex/
+.cursor/
+
+# Internal reports and development notes are kept locally, not published
+docs/
+
+# Generated experiment traces and prompt-development history
+# Keep final aggregate metrics and reproducible configs in Git.
+experiments/midterm/predictions/
+experiments/midterm/prompt_iterations/
+experiments/midterm/metrics/*_hop*_limit*.json
+
+# Downloaded local development tools and database files
+tools/
 
 # IDE
 .idea/

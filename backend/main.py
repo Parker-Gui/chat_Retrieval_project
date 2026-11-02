@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 import os
+import sys
 from dotenv import load_dotenv
 import json
 from datetime import datetime, timedelta
@@ -17,8 +18,19 @@ print(env_path)
 # Load environment variables
 load_dotenv(dotenv_path= env_path)
 
+# Make the local `app` package importable regardless of the launch directory.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-app = FastAPI(title="Chatbox API", version="1.0.0")
+from app.rag.service import (  # noqa: E402
+    PipelineConfigurationError,
+    configured_system,
+    get_pipeline,
+    shutdown as shutdown_pipelines,
+)
+from app.rag.workflow import SUPPORTED_SYSTEMS  # noqa: E402
+
+
+app = FastAPI(title="MovieGraph API", version="1.0.0")
 
 # CORS configuration for Android app
 app.add_middleware(
@@ -32,6 +44,9 @@ app.add_middleware(
 # Request/Response models
 class ChatRequest(BaseModel):
     message: str
+    # Optional: "pure_llm" | "vector_rag" | "kg_retrieval" | "hybrid".
+    # Android only sends `message`, so the configured default applies.
+    system: Optional[str] = None
 
 class ChatResponse(BaseModel):
     reply: str
@@ -53,9 +68,10 @@ class BloodPressureAnalysisResponse(BaseModel):
     alert_level: str
     email_sent: bool = False
 
-# Qwen API configuration
-QWEN_API_KEY = os.getenv("DASHSCOPE_API_KEY")
-QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+# DeepSeek API configuration. Retrieval-only experiments do not require this key.
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
 
 # Email configuration
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
@@ -63,69 +79,83 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
-if not QWEN_API_KEY:
-    raise ValueError("DASHSCOPE_API_KEY environment variable is required")
-
 @app.get("/")
 async def root():
-    return {"message": "Chatbox API is running"}
+    return {"message": "MovieGraph API is running"}
+
+@app.get("/health")
+def health():
+    """Report readiness without leaking configuration values."""
+    try:
+        system = configured_system()
+    except PipelineConfigurationError as error:
+        return {"status": "degraded", "detail": str(error)}
+    return {
+        "status": "ok",
+        "system": system,
+        "supported_systems": list(SUPPORTED_SYSTEMS),
+        "api_key_configured": bool(DEEPSEEK_API_KEY),
+    }
+
+
+@app.on_event("shutdown")
+def _shutdown_pipelines():
+    """Release the shared Neo4j driver when the server stops."""
+    shutdown_pipelines()
+
+
+def _format_reply(state) -> str:
+    """Combine the generated sentence with the complete answer list.
+
+    Long MetaQA answer sets cannot fit in one sentence, so when the sentence does
+    not mention every retrieved answer the full list is appended. The JSONL
+    evaluation reads the structured fields directly and is unaffected by this.
+    """
+    text = (state.final_answer or "").strip()
+    answers = [value for value in (state.answer_set or []) if value]
+    if len(answers) > 1:
+        lowered = text.casefold()
+        if any(value.casefold() not in lowered for value in answers):
+            text = f"{text}\n\nAnswers: " + ", ".join(answers)
+    return text
+
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+def chat(request: ChatRequest):
     """
-    Chat endpoint that integrates with Alibaba Cloud Qwen API
-    Based on: https://help.aliyun.com/zh/model-studio/use-qwen-by-calling-api
+    Answer a movie question through the configured retrieval pipeline.
+
+    The pipeline is built once per process (embedding model and retrievers are
+    reused), so requests do not pay the model-loading cost again. The Android
+    contract stays `{"message": ...} -> {"reply": ...}`.
     """
+    question = (request.message or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="message must not be empty")
+    if request.system is not None and request.system not in SUPPORTED_SYSTEMS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"system must be one of {list(SUPPORTED_SYSTEMS)}",
+        )
     try:
-        # Prepare the request for Qwen API
-        qwen_request = {
-            "model": "qwen-turbo",  # You can change this to other models like qwen-plus, qwen-max
-            "messages": [
-                {
-                    "role": "user",
-                    "content": request.message
-                }
-            ],
-            "temperature": 0.7,
-            "max_tokens": 1000
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {QWEN_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{QWEN_BASE_URL}/chat/completions",
-                headers=headers,
-                json=qwen_request
+        pipeline = get_pipeline(request.system)
+        state = pipeline.run(question)
+        reply = _format_reply(state)
+        if not reply:
+            raise HTTPException(
+                status_code=502,
+                detail="The retrieval pipeline returned an empty answer",
             )
-            
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"Qwen API error: {response.text}"
-                )
-            
-            result = response.json()
-            
-            # Extract the reply from Qwen API response
-            if "choices" in result and len(result["choices"]) > 0:
-                reply = result["choices"][0]["message"]["content"]
-                return ChatResponse(reply=reply)
-            else:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Invalid response format from Qwen API"
-                )
-                
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Request timeout")
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=502, detail=f"Network error: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        return ChatResponse(reply=reply)
+    except PipelineConfigurationError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Answer generation failed: {type(error).__name__}: {error}",
+        )
 
 @app.post("/blood-pressure/analyze", response_model=BloodPressureAnalysisResponse)
 async def analyze_blood_pressure(request: BloodPressureAnalysisRequest):
@@ -154,6 +184,8 @@ async def analyze_blood_pressure(request: BloodPressureAnalysisRequest):
             email_sent=email_sent
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
 
@@ -199,9 +231,15 @@ async def analyze_bp_data(records: List[BloodPressureRecord]) -> dict:
     请用中文回答，语言要温和、专业，适合老年人理解。
     """
 
-    # Call Qwen API for analysis
-    qwen_request = {
-        "model": "qwen-turbo",
+    # Call the DeepSeek API for analysis.
+    if not DEEPSEEK_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="DEEPSEEK_API_KEY is not configured in backend/.env",
+        )
+
+    deepseek_request = {
+        "model": DEEPSEEK_MODEL,
         "messages": [
             {
                 "role": "user",
@@ -213,21 +251,21 @@ async def analyze_bp_data(records: List[BloodPressureRecord]) -> dict:
     }
 
     headers = {
-        "Authorization": f"Bearer {QWEN_API_KEY}",
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
         "Content-Type": "application/json"
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
-            f"{QWEN_BASE_URL}/chat/completions",
+            f"{DEEPSEEK_BASE_URL}/chat/completions",
             headers=headers,
-            json=qwen_request
+            json=deepseek_request
         )
 
         if response.status_code != 200:
             raise HTTPException(
                 status_code=response.status_code,
-                detail=f"Qwen API error: {response.text}"
+                detail=f"DeepSeek API error: {response.text}"
             )
 
         result = response.json()
@@ -246,7 +284,7 @@ async def analyze_bp_data(records: List[BloodPressureRecord]) -> dict:
     else:
         raise HTTPException(
             status_code=500,
-            detail="Invalid response format from Qwen API"
+            detail="Invalid response format from DeepSeek API"
         )
 
 def extract_recommendations(ai_response: str) -> List[str]:

@@ -1,0 +1,13 @@
+{
+  "experiment": "step5_vector_rag_retrieval",
+  "framework": "neo4j-graphrag",
+  "retriever": "VectorRetriever",
+  "embedding_model": "all-MiniLM-L6-v2",
+  "embedding_dimension": 384,
+  "vector_store": "Neo4j 5.26 vector index",
+  "similarity": "cosine",
+  "top_k": 5,
+  "benchmark": "experiments/shared/benchmark/midterm_300.jsonl",
+  "generation_llm": null,
+  "note": "Step 5 evaluates retrieval only; DeepSeek generation is added later."
+}
